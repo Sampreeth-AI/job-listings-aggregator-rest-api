@@ -32,8 +32,11 @@ def create_app() -> Flask:
 
     with app.app_context():
         from app.models import Job  # Ensure metadata is registered before create_all.
+        from app.services.seed import seed_demo_jobs
         db.create_all()
         _ensure_schema()
+        if os.getenv("SEED_DEMO_JOBS", "true").lower() == "true":
+            seed_demo_jobs()
 
     _start_scheduler(app)
     return app

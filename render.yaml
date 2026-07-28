@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: roleradar-job-board
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SEED_DEMO_JOBS
+        value: "true"

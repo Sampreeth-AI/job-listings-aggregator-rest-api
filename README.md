@@ -52,3 +52,11 @@ Source terms can change; review them before enabling production scraping. Protec
 ```powershell
 python -m unittest discover -s tests
 ```
+
+## Deploy a public demo on Render
+
+1. Push this repository to GitHub.
+2. In [Render](https://render.com), choose **New** → **Web Service** and connect the GitHub repository.
+3. Use `pip install -r requirements.txt` as the build command and `gunicorn run:app --bind 0.0.0.0:$PORT` as the start command. Render creates a public `onrender.com` URL.
+
+The initial public demo includes three sample roles. Render's free web services use an ephemeral filesystem, so a SQLite database can reset after a restart. For permanent public listings, set `DATABASE_URL` to a managed MySQL database URL in Render's environment variables.
