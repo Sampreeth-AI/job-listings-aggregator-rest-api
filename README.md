@@ -1,6 +1,6 @@
 # Job Listings Aggregator & REST API
 
-A polished Flask job board that aggregates permitted job-board listings, stores them in MySQL (or SQLite for local development), exposes a searchable REST API, and schedules periodic imports with APScheduler.
+A polished Flask job board that aggregates permitted job-board listings, stores them in MySQL (or SQLite for local development), exposes a searchable REST API, and imports jobs daily with APScheduler.
 
 ## Run locally
 
@@ -23,7 +23,7 @@ DATABASE_URL=mysql+pymysql://USER:PASSWORD@localhost/job_aggregator
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/v1/health` | Service health check |
-| GET | `/api/v1/jobs` | List jobs; supports `search`, `location`, `source`, `page`, `per_page` |
+| GET | `/api/v1/jobs` | List jobs; supports `search`, `location`, `skills`, `source`, `page`, `per_page` |
 | GET | `/api/v1/jobs/<id>` | Get a single listing |
 | POST | `/api/v1/jobs` | Add a listing manually |
 | DELETE | `/api/v1/jobs/<id>` | Remove a listing |
@@ -37,9 +37,15 @@ Example:
 Invoke-RestMethod -Method Post http://127.0.0.1:5000/api/v1/jobs -ContentType 'application/json' -Body '{"title":"Backend Engineer","company":"Acme","url":"https://example.com/job/1","source":"manual","location":"Remote"}'
 ```
 
-## Adding a source
+## Sources and daily imports
 
-In `app/services/scraper.py`, add an `HtmlSource` with the site URL and CSS selectors. The scraper uses BeautifulSoup, ignores incomplete cards, and upserts listings by canonical job URL. Only configure sites whose terms of service and robots policy allow automated access. The `POST /scrape` endpoint should be protected with authentication before public deployment.
+The project imports three permitted public feeds: We Work Remotely Programming RSS, We Work Remotely Design RSS, and the Remote OK public jobs feed. Listings are deduplicated by canonical job URL and updated when a source changes. BeautifulSoup parses the RSS feeds. The daily job runs at `SCRAPE_HOUR_UTC` (default: 02:00 UTC / 7:30 AM IST). You can import immediately using:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:5000/api/v1/scrape
+```
+
+Source terms can change; review them before enabling production scraping. Protect the scrape endpoint with authentication before public deployment.
 
 ## Test
 

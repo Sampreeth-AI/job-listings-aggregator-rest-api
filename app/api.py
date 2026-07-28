@@ -24,7 +24,7 @@ def list_jobs():
         term = f"%{search}%"
         query = query.filter(or_(Job.title.ilike(term), Job.company.ilike(term),
                                  Job.description.ilike(term)))
-    for field in ("location", "source"):
+    for field in ("location", "source", "skills"):
         if value := request.args.get(field):
             query = query.filter(getattr(Job, field).ilike(f"%{value}%"))
 
@@ -50,7 +50,7 @@ def create_job():
     if Job.query.filter_by(url=data["url"]).first():
         return jsonify({"error": "A job with this URL already exists"}), 409
     job = Job(**{key: data.get(key) for key in
-                 ("title", "company", "location", "url", "source", "description")})
+                 ("title", "company", "location", "url", "source", "description", "skills")})
     db.session.add(job)
     db.session.commit()
     return jsonify(job.to_dict()), 201
@@ -69,4 +69,3 @@ def scrape():
     """Run an on-demand aggregation. In production, protect this endpoint."""
     result = scrape_all_sources()
     return jsonify(result)
-

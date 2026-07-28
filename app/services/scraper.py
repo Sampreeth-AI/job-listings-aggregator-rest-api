@@ -1,9 +1,10 @@
-"""Source adapters. Only scrape sources whose terms and robots policy permit it."""
+"""Permitted source adapters used by the daily job import."""
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from typing import Protocol
+import warnings
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
 from app import db
 from app.models import Job
@@ -11,61 +12,129 @@ from app.models import Job
 HEADERS = {"User-Agent": "JobListingsAggregator/1.0 (contact: admin@example.com)"}
 
 
+SKILL_KEYWORDS = ("python", "flask", "django", "fastapi", "java", "javascript",
+                  "typescript", "react", "node", "sql", "mysql", "aws", "docker",
+                  "devops", "data", "machine learning", "product", "design")
+
+
 @dataclass(frozen=True)
-class HtmlSource:
+class JobPayload:
+    title: str
+    company: str
+    location: str
+    url: str
+    source: str
+    description: str = ""
+    skills: str = ""
+
+
+class SourceAdapter(Protocol):
+    name: str
+
+    def fetch_jobs(self) -> list[JobPayload]: ...
+
+
+@dataclass(frozen=True)
+class RssSource:
+    """We Work Remotely publishes and permits use of these attributed RSS feeds."""
     name: str
     url: str
-    card_selector: str
-    title_selector: str
-    company_selector: str
-    link_selector: str
-    location_selector: str | None = None
+
+    def fetch_jobs(self) -> list[JobPayload]:
+        response = requests.get(self.url, headers=HEADERS, timeout=20)
+        response.raise_for_status()
+        # The built-in parser keeps setup simple; RSS item tags are supported.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", XMLParsedAsHTMLWarning)
+            feed = BeautifulSoup(response.content, "html.parser")
+        jobs: list[JobPayload] = []
+        for item in feed.find_all("item"):
+            raw_title = item.title.get_text(" ", strip=True) if item.title else ""
+            # WWR puts the canonical job URL in guid; its link tag is empty.
+            link = item.guid.get_text(strip=True) if item.guid else ""
+            description = item.description.get_text(" ", strip=True) if item.description else ""
+            title, company = _split_rss_title(raw_title)
+            if title and company and link:
+                location = item.region.get_text(" ", strip=True) if item.region else "Remote"
+                jobs.append(JobPayload(title, company, location, link, self.name,
+                                       description, _extract_skills(f"{title} {description}")))
+        return jobs
 
 
-# Add only sources you have permission to fetch; selectors are intentionally explicit.
-SOURCES: list[HtmlSource] = []
+@dataclass(frozen=True)
+class RemoteOkSource:
+    """Remote OK exposes a public jobs feed; source attribution is retained."""
+    name: str = "Remote OK"
+    url: str = "https://remoteok.com/api"
+
+    def fetch_jobs(self) -> list[JobPayload]:
+        response = requests.get(self.url, headers=HEADERS, timeout=20)
+        response.raise_for_status()
+        records = response.json()
+        jobs: list[JobPayload] = []
+        for record in records if isinstance(records, list) else []:
+            if not isinstance(record, dict) or not record.get("position") or not record.get("company"):
+                continue
+            url = record.get("url") or f"https://remoteok.com/remote-jobs/{record.get('slug', '')}"
+            tags = record.get("tags") or []
+            skills = ",".join(str(tag).lower() for tag in tags) or _extract_skills(
+                f"{record['position']} {record.get('description', '')}")
+            jobs.append(JobPayload(record["position"], record["company"],
+                                   record.get("location") or "Remote", url, self.name,
+                                   record.get("description") or "", skills))
+        return jobs
+
+
+SOURCES: tuple[SourceAdapter, ...] = (
+    RssSource("We Work Remotely · Programming", "https://weworkremotely.com/categories/remote-programming-jobs.rss"),
+    RssSource("We Work Remotely · Design", "https://weworkremotely.com/categories/remote-design-jobs.rss"),
+    RemoteOkSource(),
+)
 
 
 def scrape_all_sources() -> dict:
     created = updated = failed = 0
     for source in SOURCES:
         try:
-            result = scrape_html_source(source)
+            result = import_source(source)
             created += result["created"]
             updated += result["updated"]
         except (requests.RequestException, ValueError) as exc:
+            db.session.rollback()
             failed += 1
             print(f"Scrape failed for {source.name}: {exc}")
     return {"created": created, "updated": updated, "failed_sources": failed}
 
 
-def scrape_html_source(source: HtmlSource) -> dict:
-    response = requests.get(source.url, headers=HEADERS, timeout=20)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
+def import_source(source: SourceAdapter) -> dict:
     created = updated = 0
-    for card in soup.select(source.card_selector):
-        title = _text(card, source.title_selector)
-        company = _text(card, source.company_selector)
-        anchor = card.select_one(source.link_selector)
-        if not (title and company and anchor and anchor.get("href")):
-            continue
-        url = urljoin(source.url, anchor["href"])
-        location = _text(card, source.location_selector) if source.location_selector else None
-        job = Job.query.filter_by(url=url).first()
+    for payload in source.fetch_jobs():
+        job = Job.query.filter_by(url=payload.url).first()
         if job:
-            job.title, job.company, job.location = title, company, location
+            job.title, job.company, job.location = payload.title, payload.company, payload.location
+            job.description, job.skills, job.source = payload.description, payload.skills, payload.source
             updated += 1
         else:
-            db.session.add(Job(title=title, company=company, location=location,
-                               url=url, source=source.name))
+            db.session.add(Job(title=payload.title, company=payload.company,
+                               location=payload.location, url=payload.url,
+                               source=payload.source, description=payload.description,
+                               skills=payload.skills))
             created += 1
     db.session.commit()
     return {"created": created, "updated": updated}
 
 
-def _text(node, selector: str | None) -> str | None:
-    if not selector or not (element := node.select_one(selector)):
-        return None
-    return element.get_text(" ", strip=True) or None
+def _split_rss_title(raw_title: str) -> tuple[str, str]:
+    """WWR RSS titles are generally formatted as 'Company: Role'."""
+    if ":" in raw_title:
+        company, title = raw_title.split(":", 1)
+        return title.strip(), company.strip()
+    if " at " in raw_title.lower():
+        title, company = raw_title.rsplit(" at ", 1)
+        return title.strip(), company.strip()
+    return raw_title.strip(), "We Work Remotely"
 
+
+def _extract_skills(text: str) -> str:
+    normalized = text.lower()
+    return ",".join(keyword for keyword in SKILL_KEYWORDS if keyword in normalized)

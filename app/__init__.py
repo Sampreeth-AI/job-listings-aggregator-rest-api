@@ -6,6 +6,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from flask import Flask, render_template
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import inspect, text
 
 db = SQLAlchemy()
 scheduler = BackgroundScheduler(daemon=True)
@@ -32,6 +33,7 @@ def create_app() -> Flask:
     with app.app_context():
         from app.models import Job  # Ensure metadata is registered before create_all.
         db.create_all()
+        _ensure_schema()
 
     _start_scheduler(app)
     return app
@@ -46,13 +48,23 @@ def _start_scheduler(app: Flask) -> None:
 
     from app.services.scraper import scrape_all_sources
 
-    interval = int(os.getenv("SCRAPE_INTERVAL_MINUTES", "60"))
+    hour = int(os.getenv("SCRAPE_HOUR_UTC", "2"))
+    if not 0 <= hour <= 23:
+        raise ValueError("SCRAPE_HOUR_UTC must be between 0 and 23")
 
     def scheduled_scrape():
         with app.app_context():
             scrape_all_sources()
 
-    scheduler.add_job(scheduled_scrape, "interval", minutes=interval,
+    scheduler.add_job(scheduled_scrape, "cron", hour=hour, minute=0,
                       id="job-scraper", replace_existing=True)
     scheduler.start()
     atexit.register(lambda: scheduler.shutdown(wait=False))
+
+
+def _ensure_schema() -> None:
+    """Small safe upgrade for existing local databases without migration tooling."""
+    columns = {column["name"] for column in inspect(db.engine).get_columns("jobs")}
+    if "skills" not in columns:
+        db.session.execute(text("ALTER TABLE jobs ADD COLUMN skills VARCHAR(500)"))
+        db.session.commit()

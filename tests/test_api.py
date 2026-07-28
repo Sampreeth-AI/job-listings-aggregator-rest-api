@@ -18,13 +18,13 @@ class JobApiTests(unittest.TestCase):
     def test_create_and_filter_jobs(self):
         response = self.client.post("/api/v1/jobs", json={
             "title": "Python Developer", "company": "Acme", "location": "Remote",
-            "url": "https://example.com/jobs/1", "source": "manual"})
+            "url": "https://example.com/jobs/1", "source": "manual", "skills": "python,flask"})
         self.assertEqual(response.status_code, 201)
         response = self.client.get("/api/v1/jobs?search=Python&location=remote")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["total"], 1)
+        self.assertEqual(self.client.get("/api/v1/jobs?skills=flask").json["total"], 1)
 
 
 if __name__ == "__main__":
     unittest.main()
-
