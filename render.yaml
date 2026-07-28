@@ -11,5 +11,7 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true
+      - key: API_KEY
+        generateValue: true
       - key: SEED_DEMO_JOBS
         value: "true"

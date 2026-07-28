@@ -14,6 +14,10 @@ class JobApiTests(unittest.TestCase):
         with self.app.app_context():
             db.drop_all()
             db.create_all()
+            
+    def test_delete_requires_api_key(self):
+        response = self.client.delete("/api/v1/jobs/1")
+        self.assertEqual(response.status_code, 401)
 
     def test_create_and_filter_jobs(self):
         response = self.client.post("/api/v1/jobs", json={
@@ -28,3 +32,4 @@ class JobApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
