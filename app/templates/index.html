@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RoleRadar | Find your next opportunity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <nav class="nav">
+      <a class="brand" href="/"><span class="brand-mark">R</span> RoleRadar</a>
+      <a class="api-link" href="/api/v1/jobs" target="_blank">View API <span>↗</span></a>
+    </nav>
+
+    <section class="hero">
+      <p class="eyebrow">JOB DISCOVERY, SIMPLIFIED</p>
+      <h1>Your next great role<br><em>starts here.</em></h1>
+      <p class="intro">Search curated opportunities from one clean, fast job board.</p>
+      <form id="search-form" class="search-panel">
+        <label><span>⌕</span><input id="search" placeholder="Job title, skill, or company"></label>
+        <label><span>⌖</span><input id="location" placeholder="Location or remote"></label>
+        <button type="submit">Search jobs <span>→</span></button>
+      </form>
+    </section>
+
+    <section class="jobs-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">OPEN OPPORTUNITIES</p><h2>Jobs for you</h2></div>
+        <p id="count" class="count">Loading jobs…</p>
+      </div>
+      <div id="jobs" class="jobs" aria-live="polite"></div>
+      <p id="empty" class="empty" hidden>No roles found. Try a different search.</p>
+    </section>
+
+    <section class="add-section">
+      <div><p class="eyebrow">GROW THE BOARD</p><h2>Add a job</h2><p>Know a great opening? Add it to your local board.</p></div>
+      <form id="add-form" class="add-form">
+        <input name="title" placeholder="Job title" required>
+        <input name="company" placeholder="Company" required>
+        <input name="location" placeholder="Location (e.g. Remote)">
+        <input name="url" type="url" placeholder="Job URL" required>
+        <button type="submit">Publish job →</button>
+        <p id="form-message" role="status"></p>
+      </form>
+    </section>
+  </main>
+  <footer>Built with Flask · Job Listings Aggregator</footer>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
