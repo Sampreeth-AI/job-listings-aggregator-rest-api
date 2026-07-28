@@ -3,6 +3,7 @@ import unittest
 
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["FLASK_ENV"] = "testing"
+os.environ["API_KEY"] = "test-key"
 
 from app import create_app, db
 
@@ -14,10 +15,6 @@ class JobApiTests(unittest.TestCase):
         with self.app.app_context():
             db.drop_all()
             db.create_all()
-            
-    def test_delete_requires_api_key(self):
-        response = self.client.delete("/api/v1/jobs/1")
-        self.assertEqual(response.status_code, 401)
 
     def test_create_and_filter_jobs(self):
         response = self.client.post("/api/v1/jobs", json={
@@ -29,7 +26,10 @@ class JobApiTests(unittest.TestCase):
         self.assertEqual(response.json["total"], 1)
         self.assertEqual(self.client.get("/api/v1/jobs?skills=flask").json["total"], 1)
 
+    def test_delete_requires_api_key(self):
+        response = self.client.delete("/api/v1/jobs/1")
+        self.assertEqual(response.status_code, 401)
+
 
 if __name__ == "__main__":
     unittest.main()
-

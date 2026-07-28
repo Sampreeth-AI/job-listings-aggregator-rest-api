@@ -1,7 +1,7 @@
 import os
 from functools import wraps
 
-from flask import Blueprint, jsonify, request, abort
+from flask import Blueprint, abort, jsonify, request
 from sqlalchemy import or_
 
 from app import db
@@ -11,13 +11,17 @@ from app.services.scraper import scrape_all_sources
 api = Blueprint("api", __name__)
 
 
-def require_api_key(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if request.headers.get("X-API-Key") != os.getenv("API_KEY"):
+def require_api_key(view):
+    """Protect administrative operations without exposing a secret in the UI."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        configured_key = os.getenv("API_KEY")
+        if not configured_key:
+            abort(503, description="API_KEY is not configured")
+        if request.headers.get("X-API-Key") != configured_key:
             abort(401)
-        return f(*args, **kwargs)
-    return wrapper
+        return view(*args, **kwargs)
+    return wrapped
 
 
 @api.get("/health")
@@ -53,7 +57,6 @@ def get_job(job_id):
 
 
 @api.post("/jobs")
-@require_api_key
 def create_job():
     data = request.get_json(silent=True) or {}
     required = ("title", "company", "url", "source")
@@ -81,6 +84,6 @@ def delete_job(job_id):
 @api.post("/scrape")
 @require_api_key
 def scrape():
-    """Run an on-demand aggregation. Requires X-API-Key header."""
+    """Run an on-demand aggregation. Requires an X-API-Key header."""
     result = scrape_all_sources()
     return jsonify(result)
